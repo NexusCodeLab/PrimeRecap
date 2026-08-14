@@ -3,7 +3,7 @@ import asyncio
 import edge_tts
 import tempfile
 import os
-import time
+from moviepy.editor import VideoFileClip, AudioFileClip
 
 # Premium Navy Blue & Grey Theme Setup
 st.set_page_config(page_title="PrimeRecap Studio", layout="wide", page_icon="🎬")
@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🎬 PrimeRecap Studio")
-st.markdown("Transform your text into realistic voices and generate professional recap shorts.")
+st.markdown("Transform your text into realistic voices and auto-trim your video to match audio length.")
 st.markdown("---")
 
 # Voice and Language Selection
@@ -43,51 +43,72 @@ with col1:
     st.subheader("1. Upload Source Video")
     uploaded_video = st.file_uploader("Choose a video file (MP4)", type=['mp4'])
 
-    st.subheader("2. Select Duration")
-    duration = st.radio("Recap Length:", ["60 Seconds", "90 Seconds", "120 Seconds"])
-
 with col2:
-    st.subheader("3. Recap Script")
+    st.subheader("2. Recap Script")
     script_text = st.text_area("Type or paste your text here...", height=200, placeholder="Enter your recap script in Burmese...")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("4. Generate Output")
+    st.subheader("3. Generate Output")
     
-    if st.button("Generate Audio 🚀"):
-        if script_text.strip():
-            # Edge-TTS အတွက် အသံရွေးချယ်ခြင်း
+    if st.button("Generate Sync Video 🚀"):
+        if script_text.strip() and uploaded_video:
+            
             voice_name = "my-MM-NilarNeural" if "Nilar" in voice_choice else "my-MM-ThihaNeural"
             
-            with st.spinner(f"Generating audio with {voice_choice.split()[0]}'s voice..."):
+            with st.spinner("Processing Audio & Trimming Video..."):
                 try:
-                    # Async function ဖြင့် အသံဖန်တီးခြင်း
+                    # ၁။ အသံဖန်တီးခြင်း
                     async def generate_audio(text, voice, output_file):
                         communicate = edge_tts.Communicate(text, voice)
                         await communicate.save(output_file)
 
-                    # ယာယီ MP3 ဖိုင်တည်ဆောက်ခြင်း
-                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-                    temp_filepath = temp_file.name
-                    temp_file.close()
-
-                    # အသံပြောင်းလဲခြင်း လုပ်ငန်းစဉ် စတင်ခြင်း
-                    asyncio.run(generate_audio(script_text, voice_name, temp_filepath))
+                    temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+                    audio_path = temp_audio.name
+                    temp_audio.close()
                     
-                    st.success("✅ Audio generated successfully!")
+                    asyncio.run(generate_audio(script_text, voice_name, audio_path))
+                    audio_clip = AudioFileClip(audio_path)
+                    target_duration = audio_clip.duration # အသံကြာချိန်ကို အတိအကျ ယူပါမည်
                     
-                    # ဖန်တီးပြီးသော အသံကို ဖွင့်ပြခြင်း
-                    st.audio(temp_filepath, format="audio/mp3")
+                    # ၂။ ဗီဒီယို ဖိုင်ကို ယာယီသိမ်းဆည်းခြင်း
+                    temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                    temp_video.write(uploaded_video.read())
+                    video_path = temp_video.name
+                    temp_video.close()
                     
-                    # Download လုပ်ရန် ခလုတ်ဖန်တီးခြင်း
-                    with open(temp_filepath, "rb") as file:
+                    # ၃။ Video ကို ခေါ်ယူပြီး အသံကြာချိန်အတိုင်း ဖြတ်တောက်ခြင်း (Auto-trim)
+                    video_clip = VideoFileClip(video_path)
+                    final_duration = min(target_duration, video_clip.duration)
+                    video_clip = video_clip.subclip(0, final_duration)
+                    
+                    # ၄။ ဗီဒီယိုထဲသို့ အသံအသစ် ထည့်သွင်းခြင်း
+                    final_clip = video_clip.set_audio(audio_clip.subclip(0, final_duration))
+                    
+                    # ၅။ ဖိုင်အသစ်အဖြစ် ထုတ်ယူခြင်း
+                    output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+                    final_clip.write_videofile(
+                        output_video_path, 
+                        codec="libx264", 
+                        audio_codec="aac", 
+                        preset="ultrafast", 
+                        logger=None
+                    )
+                    
+                    st.success("✅ Video correctly synced to audio duration!")
+                    
+                    # ထွက်လာသော ဗီဒီယိုအား ပြသခြင်းနှင့် Download
+                    st.video(output_video_path)
+                    
+                    with open(output_video_path, "rb") as file:
                         st.download_button(
-                            label="⬇️ Download Audio (MP3)",
+                            label="⬇️ Download Synced Video (MP4)",
                             data=file,
-                            file_name="recap_audio.mp3",
-                            mime="audio/mp3"
+                            file_name="synced_recap.mp4",
+                            mime="video/mp4"
                         )
                         
                 except Exception as e:
-                    st.error(f"An error occurred: {e}")
+                    st.error(f"Error Occurred: {e}. (Free server များတွင် ဖိုင်ဆိုဒ်ကြီးပါက Error ပြနိုင်ပါသည်။)")
+                    
         else:
-            st.warning("Please enter your script first to generate audio.")
+            st.warning("Please upload a video and enter your script first.")
