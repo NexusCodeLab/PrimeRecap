@@ -4,6 +4,7 @@ import edge_tts
 import tempfile
 import os
 from moviepy.editor import VideoFileClip, AudioFileClip
+import moviepy.video.fx.all as vfx
 
 # Premium Navy Blue & Grey Theme Setup
 st.set_page_config(page_title="PrimeRecap Studio", layout="wide", page_icon="🎬")
@@ -17,7 +18,7 @@ st.markdown("""
         border: none; padding: 10px 24px; font-weight: bold; width: 100%;
     }
     .stButton>button:hover { background-color: #3B82F6; color: white; }
-    .voice-box {
+    .voice-box, .filter-box {
         background-color: white; padding: 20px; border-radius: 10px;
         border: 1px solid #E2E8F0; margin-bottom: 25px;
     }
@@ -25,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🎬 PrimeRecap Studio")
-st.markdown("Transform your text into realistic voices and auto-trim your video to match audio length.")
+st.markdown("Text-driven Auto-Sync Video Editor with Anti-Copyright Color Filter.")
 st.markdown("---")
 
 # Voice and Language Selection
@@ -42,6 +43,13 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("1. Upload Source Video")
     uploaded_video = st.file_uploader("Choose a video file (MP4)", type=['mp4'])
+    
+    # 🛡️ Anti-Copyright Filter Checkbox (Color Filter Only)
+    st.markdown('<div class="filter-box">', unsafe_allow_html=True)
+    st.markdown("**🛡️ Anti-Copyright Security**")
+    apply_color_filter = st.checkbox("Apply Smart Color Filter (Bypass AI bots)", value=True)
+    st.markdown("<small>*Mirror, Logo နှင့် Subtitles များကို Video Editor တွင် ကိုယ်တိုင် ထည့်သွင်းပါ။*</small>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
     st.subheader("2. Recap Script")
@@ -55,7 +63,7 @@ with col2:
             
             voice_name = "my-MM-NilarNeural" if "Nilar" in voice_choice else "my-MM-ThihaNeural"
             
-            with st.spinner("Processing Audio & Trimming Video..."):
+            with st.spinner("Processing Audio, Auto-Syncing Video & Applying Color Filter..."):
                 try:
                     # ၁။ အသံဖန်တီးခြင်း
                     async def generate_audio(text, voice, output_file):
@@ -68,7 +76,7 @@ with col2:
                     
                     asyncio.run(generate_audio(script_text, voice_name, audio_path))
                     audio_clip = AudioFileClip(audio_path)
-                    target_duration = audio_clip.duration # အသံကြာချိန်ကို အတိအကျ ယူပါမည်
+                    target_duration = audio_clip.duration 
                     
                     # ၂။ ဗီဒီယို ဖိုင်ကို ယာယီသိမ်းဆည်းခြင်း
                     temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -76,15 +84,23 @@ with col2:
                     video_path = temp_video.name
                     temp_video.close()
                     
-                    # ၃။ Video ကို ခေါ်ယူပြီး အသံကြာချိန်အတိုင်း ဖြတ်တောက်ခြင်း (Auto-trim)
+                    # ၃။ Video ကို ခေါ်ယူခြင်း
                     video_clip = VideoFileClip(video_path)
-                    final_duration = min(target_duration, video_clip.duration)
-                    video_clip = video_clip.subclip(0, final_duration)
                     
-                    # ၄။ ဗီဒီယိုထဲသို့ အသံအသစ် ထည့်သွင်းခြင်း
-                    final_clip = video_clip.set_audio(audio_clip.subclip(0, final_duration))
+                    # ၄။ စာသားအရှည်ပေါ် မူတည်၍ ဗီဒီယိုကို Loop (သို့) Trim လုပ်ခြင်း
+                    if video_clip.duration < target_duration:
+                        video_clip = video_clip.fx(vfx.loop, duration=target_duration)
+                    else:
+                        video_clip = video_clip.subclip(0, target_duration)
+                        
+                    # ၅။ Smart Color Filter ဖြင့် Copyright ရှောင်ရှားခြင်း
+                    if apply_color_filter:
+                        video_clip = video_clip.fx(vfx.colorx, 1.05) # အရောင် ၅ ရာခိုင်နှုန်း တိုးမည်
                     
-                    # ၅။ ဖိုင်အသစ်အဖြစ် ထုတ်ယူခြင်း
+                    # ၆။ ဗီဒီယိုထဲသို့ အသံအသစ် ထည့်သွင်းခြင်း
+                    final_clip = video_clip.set_audio(audio_clip)
+                    
+                    # ၇။ ဖိုင်အသစ်အဖြစ် ထုတ်ယူခြင်း
                     output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
                     final_clip.write_videofile(
                         output_video_path, 
@@ -94,21 +110,21 @@ with col2:
                         logger=None
                     )
                     
-                    st.success("✅ Video correctly synced to audio duration!")
+                    st.success("✅ Video successfully generated with Auto-Sync & Color Filter!")
                     
                     # ထွက်လာသော ဗီဒီယိုအား ပြသခြင်းနှင့် Download
                     st.video(output_video_path)
                     
                     with open(output_video_path, "rb") as file:
                         st.download_button(
-                            label="⬇️ Download Synced Video (MP4)",
+                            label="⬇️ Download Secure Video (MP4)",
                             data=file,
-                            file_name="synced_recap.mp4",
+                            file_name="synced_recap_filtered.mp4",
                             mime="video/mp4"
                         )
                         
                 except Exception as e:
-                    st.error(f"Error Occurred: {e}. (Free server များတွင် ဖိုင်ဆိုဒ်ကြီးပါက Error ပြနိုင်ပါသည်။)")
+                    st.error(f"Error Occurred: {e}")
                     
         else:
             st.warning("Please upload a video and enter your script first.")
