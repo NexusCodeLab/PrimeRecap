@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🎬 PrimeRecap Studio")
-st.markdown("Text-driven Auto-Sync Video Editor with Anti-Copyright Color Filter.")
+st.markdown("Text-driven Auto-Sync Video Editor (Safe Mode).")
 st.markdown("---")
 
 # Voice and Language Selection
@@ -44,11 +44,11 @@ with col1:
     st.subheader("1. Upload Source Video")
     uploaded_video = st.file_uploader("Choose a video file (MP4)", type=['mp4'])
     
-    # 🛡️ Anti-Copyright Filter Checkbox (Color Filter Only)
+    # Anti-Copyright Filter Checkbox (Speed Bypass - Safe for RAM)
     st.markdown('<div class="filter-box">', unsafe_allow_html=True)
-    st.markdown("**🛡️ Anti-Copyright Security**")
-    apply_color_filter = st.checkbox("Apply Smart Color Filter (Bypass AI bots)", value=True)
-    st.markdown("<small>*Mirror, Logo နှင့် Subtitles များကို Video Editor တွင် ကိုယ်တိုင် ထည့်သွင်းပါ။*</small>", unsafe_allow_html=True)
+    st.markdown("**🛡️ Anti-Copyright Security (RAM Safe)**")
+    apply_speed_bypass = st.checkbox("Apply 1.05x Speed Bypass (Invisible to Bots)", value=True)
+    st.markdown("<small>*Mirror နှင့် Color များကို KineMaster တွင် ကိုယ်တိုင် ထည့်သွင်းပါ။*</small>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
@@ -63,7 +63,7 @@ with col2:
             
             voice_name = "my-MM-NilarNeural" if "Nilar" in voice_choice else "my-MM-ThihaNeural"
             
-            with st.spinner("Processing Audio, Auto-Syncing Video & Applying Color Filter..."):
+            with st.spinner("Processing Audio & Auto-Syncing Video..."):
                 try:
                     # ၁။ အသံဖန်တီးခြင်း
                     async def generate_audio(text, voice, output_file):
@@ -87,16 +87,17 @@ with col2:
                     # ၃။ Video ကို ခေါ်ယူခြင်း
                     video_clip = VideoFileClip(video_path)
                     
-                    # ၄။ စာသားအရှည်ပေါ် မူတည်၍ ဗီဒီယိုကို Loop (သို့) Trim လုပ်ခြင်း
+                    # ၄။ RAM မစားသော Copyright Bypass (Speed Change)
+                    if apply_speed_bypass:
+                        # ဗီဒီယိုကို 5% မြန်လိုက်ခြင်းဖြင့် Hash ပြောင်းလဲသွားစေသည် (RAM မစားပါ)
+                        video_clip = video_clip.fx(vfx.speedx, 1.05)
+                    
+                    # ၅။ စာသားအရှည်ပေါ် မူတည်၍ ဗီဒီယိုကို Loop (သို့) Trim လုပ်ခြင်း
                     if video_clip.duration < target_duration:
                         video_clip = video_clip.fx(vfx.loop, duration=target_duration)
                     else:
                         video_clip = video_clip.subclip(0, target_duration)
                         
-                    # ၅။ Smart Color Filter ဖြင့် Copyright ရှောင်ရှားခြင်း
-                    if apply_color_filter:
-                        video_clip = video_clip.fx(vfx.colorx, 1.05) # အရောင် ၅ ရာခိုင်နှုန်း တိုးမည်
-                    
                     # ၆။ ဗီဒီယိုထဲသို့ အသံအသစ် ထည့်သွင်းခြင်း
                     final_clip = video_clip.set_audio(audio_clip)
                     
@@ -110,7 +111,7 @@ with col2:
                         logger=None
                     )
                     
-                    st.success("✅ Video successfully generated with Auto-Sync & Color Filter!")
+                    st.success("✅ Video successfully generated with Auto-Sync & Safe Bypass!")
                     
                     # ထွက်လာသော ဗီဒီယိုအား ပြသခြင်းနှင့် Download
                     st.video(output_video_path)
@@ -119,7 +120,7 @@ with col2:
                         st.download_button(
                             label="⬇️ Download Secure Video (MP4)",
                             data=file,
-                            file_name="synced_recap_filtered.mp4",
+                            file_name="synced_recap_secure.mp4",
                             mime="video/mp4"
                         )
                         
