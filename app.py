@@ -1,131 +1,146 @@
 import streamlit as st
-import asyncio
-import edge_tts
-import tempfile
 import os
-from moviepy.editor import VideoFileClip, AudioFileClip
-import moviepy.video.fx.all as vfx
 
-# Premium Navy Blue & Grey Theme Setup
-st.set_page_config(page_title="PrimeRecap Studio", layout="wide", page_icon="🎬")
+# Pillow (PIL) Version အသစ်များအတွက် Error ဖြေရှင်းချက်
+from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
 
-st.markdown("""
+from moviepy.editor import ImageClip, VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+
+# 1. Page Configuration & Custom CSS
+st.set_page_config(page_title="Wave-News Video Editor", page_icon="📰", layout="centered")
+
+matcha_css = """
 <style>
-    .stApp { background-color: #F8FAFC; }
-    h1, h2, h3, p, label { color: #0F172A; font-family: 'Montserrat', sans-serif; }
-    .stButton>button {
-        background-color: #1E3A8A; color: white; border-radius: 8px;
-        border: none; padding: 10px 24px; font-weight: bold; width: 100%;
-    }
-    .stButton>button:hover { background-color: #3B82F6; color: white; }
-    .voice-box, .filter-box {
-        background-color: white; padding: 20px; border-radius: 10px;
-        border: 1px solid #E2E8F0; margin-bottom: 25px;
-    }
+    .stApp { background-color: #F1F8F1; }
+    h1, h2, h3, p, label { color: #3A5A40 !important; font-family: 'Pyidaungsu', sans-serif; }
+    .stButton>button { background-color: #588157; color: white; border-radius: 8px; width: 100%; font-weight: bold; }
+    .stButton>button:hover { background-color: #3A5A40; color: white; }
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(matcha_css, unsafe_allow_html=True)
 
-st.title("🎬 PrimeRecap Studio")
-st.markdown("Text-driven Auto-Sync Video Editor (Safe Mode).")
-st.markdown("---")
+st.title("📰 Wave-News TikTok Video ဖန်တီးသောစနစ်")
+st.markdown("သတင်း Banner များထည့်သွင်းကာ TikTok Size (9:16) ဖြင့် သတင်းဗီဒီယိုများကို အလိုအလျောက် ပေါင်းစပ်ဖန်တီးနိုင်ပါသည်။")
 
-# Voice and Language Selection
-st.markdown('<div class="voice-box">', unsafe_allow_html=True)
-v_col1, v_col2 = st.columns(2)
-with v_col1:
-    st.selectbox("Language", ["Burmese"], disabled=True)
-with v_col2:
-    voice_choice = st.selectbox("Voice", ["Nilar (Female)", "Thiha (Male)"])
-st.markdown('</div>', unsafe_allow_html=True)
+# 2. Input Section
+uploaded_audio = st.file_uploader("🎵 သတင်းအသံဖိုင် ထည့်ရန် (Audio)", type=['mp3', 'wav'])
+news_banner = st.file_uploader("📰 သတင်း Banner သို့မဟုတ် Logo ထည့်ရန် (နောက်ခံအလွတ် PNG ဖိုင် ဖြစ်ရမည်)", type=['png'])
+uploaded_images = st.file_uploader("🖼️ ဓာတ်ပုံများ ထည့်ရန် (ပုံများစွာ ရွေးနိုင်သည်)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+uploaded_videos = st.file_uploader("🎥 ဗီဒီယို ဖိုင်များ ထည့်ရန် (ဖိုင်များစွာ ရွေးနိုင်သည်)", type=['mp4', 'mov'], accept_multiple_files=True)
 
-col1, col2 = st.columns(2)
+st.write("")
+generate_btn = st.button("သတင်း Video ဖန်တီးပါ 🎬")
 
-with col1:
-    st.subheader("1. Upload Source Video")
-    uploaded_video = st.file_uploader("Choose a video file (MP4)", type=['mp4'])
-    
-    # Anti-Copyright Filter Checkbox (Speed Bypass - Safe for RAM)
-    st.markdown('<div class="filter-box">', unsafe_allow_html=True)
-    st.markdown("**🛡️ Anti-Copyright Security (RAM Safe)**")
-    apply_speed_bypass = st.checkbox("Apply 1.05x Speed Bypass (Invisible to Bots)", value=True)
-    st.markdown("<small>*Mirror နှင့် Color များကို KineMaster တွင် ကိုယ်တိုင် ထည့်သွင်းပါ။*</small>", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col2:
-    st.subheader("2. Recap Script")
-    script_text = st.text_area("Type or paste your text here...", height=200, placeholder="Enter your recap script in Burmese...")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("3. Generate Output")
-    
-    if st.button("Generate Sync Video 🚀"):
-        if script_text.strip() and uploaded_video:
-            
-            voice_name = "my-MM-NilarNeural" if "Nilar" in voice_choice else "my-MM-ThihaNeural"
-            
-            with st.spinner("Processing Audio & Auto-Syncing Video..."):
+# 3. Video Processing Logic
+if generate_btn:
+    if uploaded_audio is not None:
+        total_visuals = len(uploaded_images) + len(uploaded_videos)
+        
+        if total_visuals > 0:
+            with st.spinner('Wave-News ဗီဒီယိုကို ဖန်တီးနေပါသည်... (ခေတ္တစောင့်ပေးပါ)'):
                 try:
-                    # ၁။ အသံဖန်တီးခြင်း
-                    async def generate_audio(text, voice, output_file):
-                        communicate = edge_tts.Communicate(text, voice)
-                        await communicate.save(output_file)
-
-                    temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-                    audio_path = temp_audio.name
-                    temp_audio.close()
+                    temp_files = []
+                    audio_path = "temp_audio.mp3"
+                    video_file = "wave_news_tiktok.mp4"
                     
-                    asyncio.run(generate_audio(script_text, voice_name, audio_path))
+                    with open(audio_path, "wb") as f:
+                        f.write(uploaded_audio.getbuffer())
+                    temp_files.append(audio_path)
+                    
                     audio_clip = AudioFileClip(audio_path)
-                    target_duration = audio_clip.duration 
+                    total_duration = audio_clip.duration
+                    item_duration = total_duration / total_visuals
                     
-                    # ၂။ ဗီဒီယို ဖိုင်ကို ယာယီသိမ်းဆည်းခြင်း
-                    temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                    temp_video.write(uploaded_video.read())
-                    video_path = temp_video.name
-                    temp_video.close()
+                    TARGET_SIZE = (720, 1280) # TikTok 9:16 Size
+                    visual_clips = []
                     
-                    # ၃။ Video ကို ခေါ်ယူခြင်း
-                    video_clip = VideoFileClip(video_path)
-                    
-                    # ၄။ RAM မစားသော Copyright Bypass (Speed Change)
-                    if apply_speed_bypass:
-                        # ဗီဒီယိုကို 5% မြန်လိုက်ခြင်းဖြင့် Hash ပြောင်းလဲသွားစေသည် (RAM မစားပါ)
-                        video_clip = video_clip.fx(vfx.speedx, 1.05)
-                    
-                    # ၅။ စာသားအရှည်ပေါ် မူတည်၍ ဗီဒီယိုကို Loop (သို့) Trim လုပ်ခြင်း
-                    if video_clip.duration < target_duration:
-                        video_clip = video_clip.fx(vfx.loop, duration=target_duration)
-                    else:
-                        video_clip = video_clip.subclip(0, target_duration)
+                    # ဓာတ်ပုံများကို Zoom Effect ဖြင့် ပြင်ဆင်ခြင်း
+                    for idx, img_file in enumerate(uploaded_images):
+                        temp_img = f"temp_img_{idx}.jpg"
+                        with open(temp_img, "wb") as f:
+                            f.write(img_file.getbuffer())
+                        temp_files.append(temp_img)
                         
-                    # ၆။ ဗီဒီယိုထဲသို့ အသံအသစ် ထည့်သွင်းခြင်း
-                    final_clip = video_clip.set_audio(audio_clip)
+                        clip = ImageClip(temp_img).set_duration(item_duration)
+                        w, h = clip.size
+                        if w/h > 720/1280:
+                            clip = clip.resize(height=1280)
+                        else:
+                            clip = clip.resize(width=720)
+                        clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=720, height=1280)
+                        
+                        zoomed_clip = clip.resize(lambda t: 1 + 0.05 * (t / item_duration))
+                        final_clip = CompositeVideoClip([zoomed_clip.set_position(('center', 'center'))], size=TARGET_SIZE).set_duration(item_duration)
+                        visual_clips.append(final_clip)
                     
-                    # ၇။ ဖိုင်အသစ်အဖြစ် ထုတ်ယူခြင်း
-                    output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
-                    final_clip.write_videofile(
-                        output_video_path, 
+                    # Video များကို ပြင်ဆင်ခြင်း
+                    for idx, vid_file in enumerate(uploaded_videos):
+                        temp_vid = f"temp_vid_{idx}.mp4"
+                        with open(temp_vid, "wb") as f:
+                            f.write(vid_file.getbuffer())
+                        temp_files.append(temp_vid)
+                        
+                        vid_clip = VideoFileClip(temp_vid)
+                        if vid_clip.duration > item_duration:
+                            vid_clip = vid_clip.subclip(0, item_duration)
+                        else:
+                            vid_clip = vid_clip.set_duration(item_duration)
+                        
+                        w, h = vid_clip.size
+                        if w/h > 720/1280:
+                            vid_clip = vid_clip.resize(height=1280)
+                        else:
+                            vid_clip = vid_clip.resize(width=720)
+                        vid_clip = vid_clip.crop(x_center=vid_clip.w/2, y_center=vid_clip.h/2, width=720, height=1280)
+                        
+                        vid_clip = vid_clip.without_audio()
+                        visual_clips.append(vid_clip)
+                    
+                    # အပိုင်းများအားလုံးကို ဆက်ခြင်း
+                    final_visual = concatenate_videoclips(visual_clips, method="compose")
+                    
+                    # သတင်း Banner (Overlay) ထည့်သွင်းခြင်း
+                    if news_banner is not None:
+                        banner_path = "temp_banner.png"
+                        with open(banner_path, "wb") as f:
+                            f.write(news_banner.getbuffer())
+                        temp_files.append(banner_path)
+                        
+                        # Banner ကို Video အလျား (720) နှင့် ညီအောင် ချိန်ညှိပြီး အောက်ခြေတွင် ထားခြင်း
+                        banner_clip = ImageClip(banner_path).set_duration(final_visual.duration)
+                        banner_clip = banner_clip.resize(width=720)
+                        banner_clip = banner_clip.set_position(("center", "bottom"))
+                        
+                        # Video မျက်နှာပြင်ပေါ်တွင် Banner ကို ထပ်အုပ်ခြင်း
+                        final_visual = CompositeVideoClip([final_visual, banner_clip])
+                    
+                    # အသံဖိုင် ပေါင်းထည့်ခြင်း
+                    final_video = final_visual.set_audio(audio_clip)
+                    
+                    # Video ထုတ်ယူခြင်း
+                    final_video.write_videofile(
+                        video_file, 
+                        fps=24, 
                         codec="libx264", 
-                        audio_codec="aac", 
-                        preset="ultrafast", 
-                        logger=None
+                        audio_codec="aac",
+                        preset="ultrafast"
                     )
                     
-                    st.success("✅ Video successfully generated with Auto-Sync & Safe Bypass!")
+                    st.success("✅ သတင်း Video ဖန်တီးမှု အောင်မြင်ပါသည်။")
+                    st.video(video_file)
                     
-                    # ထွက်လာသော ဗီဒီယိုအား ပြသခြင်းနှင့် Download
-                    st.video(output_video_path)
-                    
-                    with open(output_video_path, "rb") as file:
-                        st.download_button(
-                            label="⬇️ Download Secure Video (MP4)",
-                            data=file,
-                            file_name="synced_recap_secure.mp4",
-                            mime="video/mp4"
-                        )
-                        
+                    # Memory ရှင်းလင်းခြင်း
+                    audio_clip.close()
+                    final_video.close()
+                    for f_path in temp_files:
+                        if os.path.exists(f_path):
+                            os.remove(f_path)
+                            
                 except Exception as e:
-                    st.error(f"Error Occurred: {e}")
-                    
+                    st.error(f"Error ဖြစ်ပေါ်နေပါသည်: {e}")
         else:
-            st.warning("Please upload a video and enter your script first.")
+            st.warning("⚠️ ကျေးဇူးပြု၍ Video တွင်ပြသမည့် ဓာတ်ပုံ (သို့) Video ဖိုင်များ ထည့်သွင်းပေးပါ။")
+    else:
+        st.warning("⚠️ ကျေးဇူးပြု၍ နောက်ခံအဖြစ် အသုံးပြုမည့် သတင်းအသံဖိုင်ကို အရင်ထည့်သွင်းပေးပါ။")
